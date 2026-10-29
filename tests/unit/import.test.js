@@ -34,12 +34,12 @@ test('readOrganisationLists reads both files from a directory', async (t) => {
   ]);
 });
 
-test('the committed data files parse to 80 suppliers and 168 factories, all with codes', async () => {
+test('the committed data files parse to 89 suppliers and 168 factories, all with codes', async () => {
   const dir = path.join(import.meta.dirname, '..', '..', 'scripts', 'data');
   const orgs = await readOrganisationLists(dir);
   const suppliers = orgs.filter((o) => o.kind === 'supplier');
   const factories = orgs.filter((o) => o.kind === 'factory');
-  assert.equal(suppliers.length, 80);
+  assert.equal(suppliers.length, 89);
   assert.equal(factories.length, 168);
   assert.ok(orgs.every((o) => /^[0-9]{5}$/.test(o.code) && o.name.length > 0));
 });

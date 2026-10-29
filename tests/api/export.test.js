@@ -20,7 +20,24 @@ test('GET /api/admin/export requires a session', async () => {
 
 test('GET /api/admin/export downloads an xlsx built from the dashboard data', async () => {
   const db = fakeDb({
-    tables: { org_status: { data: fixtureOrgs, error: null }, attendees: { data: fixtureAttendees, error: null } },
+    tables: {
+      org_status: { data: fixtureOrgs, error: null },
+      attendees: { data: fixtureAttendees, error: null },
+      events: { data: [{
+        id: '11111111-1111-4111-8111-111111111111', code: 'event-2026', name: 'Event 2026',
+        starts_at: '2026-11-04T03:00:00Z', status: 'open',
+      }], error: null },
+      event_registrations: { data: [{
+        id: '22222222-2222-4222-8222-222222222222', event_id: '11111111-1111-4111-8111-111111111111',
+        attendees: { id: 'a1', name: 'Rahim Uddin', from_type: 'factory', organisation_name: null },
+        registration_orgs: [{ kind: 'factory', name: 'Aspire Garments' }],
+      }], error: null },
+    },
+    rpc: {
+      prepare_event_credentials: ({ p_items: items }) => ({
+        data: items.map((item) => ({ ...item, issued: true })), error: null,
+      }),
+    },
   });
   const res = await request(createApp({ db, config: testConfig, loginDelayMs: 0 }))
     .get('/api/admin/export')
@@ -36,4 +53,5 @@ test('GET /api/admin/export downloads an xlsx built from the dashboard data', as
   await workbook.xlsx.load(res.body);
   assert.equal(workbook.worksheets.length, 7);
   assert.equal(workbook.getWorksheet('Participants').rowCount, 5);
+  assert.equal(workbook.getWorksheet('Participants').getImages().length, 1);
 });

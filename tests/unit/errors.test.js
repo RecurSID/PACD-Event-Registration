@@ -58,12 +58,23 @@ test('network failures and lock timeouts become 503, anything else 500', () => {
 
 function fakeRes() {
   return {
+    headersSent: false,
     statusCode: 0,
     body: null,
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
   };
 }
+
+test('errorHandler delegates errors after a streamed response has started', (t) => {
+  t.mock.method(console, 'error', () => {});
+  const error = new Error('stream failed');
+  const res = { ...fakeRes(), headersSent: true };
+  let delegated;
+  errorHandler(error, { method: 'POST', originalUrl: '/api/admin/events/id/qrs.pdf' }, res, (err) => { delegated = err; });
+  assert.equal(delegated, error);
+  assert.equal(res.statusCode, 0);
+});
 
 test('errorHandler writes AppErrors as { error, message, ...extra }', () => {
   const res = fakeRes();

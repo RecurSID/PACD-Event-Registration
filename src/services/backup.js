@@ -52,9 +52,12 @@ export const BACKUP_TABLES = [
   },
   {
     name: 'registration_credentials',
-    columns: ['id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at', 'revoked_at', 'print_payload'],
-    // Allows a safety backup immediately before migration 012 adds this column.
-    optionalColumns: ['print_payload'],
+    columns: [
+      'id', 'registration_id', 'token_hash', 'fallback_code_hash', 'status', 'issued_at',
+      'revoked_at', 'print_token', 'fallback_code',
+    ],
+    // Allows a safety backup immediately before migration 013 adds these columns.
+    optionalColumns: ['print_token', 'fallback_code'],
     order: ['registration_id', 'issued_at'],
   },
   {

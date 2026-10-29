@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createCredential, credentialHash, normaliseFallbackCode, openCredential, scannedCredentialHash, sealCredential,
+  createCredential, credentialHash, normaliseFallbackCode, scannedCredentialHash,
 } from '../../src/services/credential.js';
 
 test('creates an opaque versioned credential and printable fallback code', () => {
@@ -22,12 +22,5 @@ test('manual fallback hashing ignores spaces, hyphens and letter case', () => {
 test('QR token hashing preserves the opaque token exactly', () => {
   const token = 'ER1.AbCd_-123';
   assert.equal(scannedCredentialHash(token), credentialHash(token));
-});
-
-test('print credentials can be recovered unchanged for stable reprints', () => {
-  const credential = createCredential({ tokenBytes: Buffer.alloc(24, 3), fallbackBytes: Buffer.alloc(8, 4) });
-  const payload = sealCredential(credential, 's'.repeat(32), Buffer.alloc(12, 5));
-  assert.deepEqual(openCredential(payload, 's'.repeat(32)), { token: credential.token, fallback: credential.fallback });
-  assert.throws(() => openCredential(payload, 'x'.repeat(32)));
 });
 

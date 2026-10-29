@@ -56,8 +56,8 @@ test('pre-migration backups omit an optional column that does not exist yet', as
         select(value) { columns = value; selections.push(value); return query; },
         order() { return query; },
         range() {
-          return columns.includes('print_payload')
-            ? Promise.resolve({ data: null, error: { code: '42703', message: 'column registration_credentials.print_payload does not exist' } })
+          return columns.includes('print_token')
+            ? Promise.resolve({ data: null, error: { code: '42703', message: 'column registration_credentials.print_token does not exist' } })
             : Promise.resolve({ data: [{ id: 'credential-1' }], error: null, count: 1 });
         },
       };
@@ -66,10 +66,10 @@ test('pre-migration backups omit an optional column that does not exist yet', as
   };
   const rows = await readTable(db, {
     name: 'registration_credentials',
-    columns: ['id', 'print_payload'], optionalColumns: ['print_payload'], order: ['id'],
+    columns: ['id', 'print_token'], optionalColumns: ['print_token'], order: ['id'],
   });
   assert.deepEqual(rows, [{ id: 'credential-1' }]);
-  assert.deepEqual(selections, ['id,print_payload', 'id']);
+  assert.deepEqual(selections, ['id,print_token', 'id']);
 });
 
 test('backup paths cannot escape the selected directory', () => {

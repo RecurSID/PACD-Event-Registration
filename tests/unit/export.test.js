@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
+import QRCode from 'qrcode';
 import { buildDashboard } from '../../src/services/dashboard.js';
 import { buildWorkbook, exportFilename, formatDhaka } from '../../src/services/export.js';
 import { fixtureAttendees, fixtureNow, fixtureOrgs } from '../helpers/dashboard-fixture.js';
@@ -54,17 +55,29 @@ test('Participants has one row per person with designation, organisation and pho
   const sheet = (await roundTrip(buildWorkbook(data()))).getWorksheet('Participants');
   assert.deepEqual(headers(sheet), [
     'Name', 'Designation', 'Email', 'Phone', 'From', 'Suppliers', 'Supplier codes',
-    'Factories', 'Factory codes', 'Organisation (other)', 'Photo', 'Registered at',
+    'Factories', 'Factory codes', 'Organisation (other)', 'Photo', 'Registered at', 'QR code',
   ]);
   assert.equal(sheet.rowCount, 5);
   assert.deepEqual(sheet.getRow(2).values.slice(1), [
     'Rahim Uddin', 'Merchandiser', 'rahim@example.com', '+8801711000001', 'Factory',
-    'Padma Textiles Ltd', 'S-1', 'Aspire Garments (24040); Rainbow Knit Ltd', 'F-3; R-5', '', 'Y', '2026-09-17 14:00',
+    'Padma Textiles Ltd', 'S-1', 'Aspire Garments (24040); Rainbow Knit Ltd', 'F-3; R-5', '', 'Y', '2026-09-17 14:00', '',
   ]);
   assert.deepEqual(sheet.getRow(5).values.slice(1), [
     'Nadia Islam', 'Sustainability Lead', 'nadia@example.com', '+8801711000004', 'Other',
-    '', '', '', '', 'Primark Limited', 'N', '2026-09-17 17:00',
+    '', '', '', '', 'Primark Limited', 'N', '2026-09-17 17:00', '',
   ]);
+});
+
+test('Participants embeds supplied QR PNGs in the rightmost column', async () => {
+  const png = await QRCode.toBuffer('https://example.com/verify#test', { type: 'png', width: 120 });
+  const workbook = await roundTrip(buildWorkbook(data(), {
+    qrEvent: { name: 'Event 2026' },
+    qrImages: [{ attendeeId: 'a1', png }],
+  }));
+  const sheet = workbook.getWorksheet('Participants');
+  assert.equal(sheet.getImages().length, 1);
+  assert.equal(sheet.getRow(2).height, 96);
+  assert.equal(sheet.getColumn(13).values[1], 'QR code');
 });
 
 test('Participant-Orgs has one row per person–organisation link', async () => {

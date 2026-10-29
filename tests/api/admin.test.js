@@ -24,6 +24,7 @@ const protectedRoutes = [
   ['get', '/api/admin/qr-events'],
   ['get', `/api/admin/events/${PERSON_ID}/qr-registrations`],
   ['post', `/api/admin/events/${PERSON_ID}/qrs.pdf`],
+  ['post', `/api/admin/events/${PERSON_ID}/qrs.zip`],
   ['post', `/api/admin/events/${PERSON_ID}/qr.png`],
   ['get', '/api/admin/attendance-days'],
   ['get', `/api/admin/attendance?event_day_id=${PERSON_ID}`],

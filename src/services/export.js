@@ -62,7 +62,7 @@ const orgRow = (o) => ({
   people: peopleText(o.people),
 });
 
-export function buildWorkbook(data) {
+export function buildWorkbook(data, { qrEvent, qrImages = [] } = {}) {
   const workbook = new ExcelJS.Workbook();
   workbook.created = new Date(data.generated_at);
   const s = data.summary;
@@ -82,13 +82,15 @@ export function buildWorkbook(data) {
     { item: 'Factories missing', value: s.factories.missing },
     { item: 'Factories full', value: s.factories.full },
     { item: 'Pending approvals', value: s.pending },
+    ...(qrEvent ? [{ item: 'QR code event', value: qrEvent.name }] : []),
   ]);
 
-  addSheet(workbook, 'Participants', [
+  const participants = addSheet(workbook, 'Participants', [
     ['Name', 'name', 25], ['Designation', 'designation', 22], ['Email', 'email', 30], ['Phone', 'phone', 18],
     ['From', 'from', 10], ['Suppliers', 'suppliers', 45], ['Supplier codes', 'supplier_codes', 20],
     ['Factories', 'factories', 45], ['Factory codes', 'factory_codes', 20],
     ['Organisation (other)', 'organisation', 30], ['Photo', 'photo', 8], ['Registered at', 'registered_at', 18],
+    ['QR code', 'qr_code', 20],
   ], data.participants.map((p) => ({
     name: p.name,
     designation: p.designation,
@@ -102,7 +104,21 @@ export function buildWorkbook(data) {
     organisation: p.organisation_name ?? '',
     photo: p.photo_path ? 'Y' : 'N',
     registered_at: formatDhaka(p.created_at),
+    qr_code: '',
   })));
+  const qrByAttendee = new Map(qrImages.map((item) => [item.attendeeId, item.png]));
+  data.participants.forEach((participant, index) => {
+    const png = qrByAttendee.get(participant.id);
+    if (!png) return;
+    const rowNumber = index + 2;
+    participants.getRow(rowNumber).height = 96;
+    const imageId = workbook.addImage({ buffer: png, extension: 'png' });
+    participants.addImage(imageId, {
+      tl: { col: 12.15, row: rowNumber - 0.9 },
+      ext: { width: 118, height: 118 },
+      editAs: 'oneCell',
+    });
+  });
 
   addSheet(workbook, 'Participant-Orgs', [
     ['Name', 'name', 25], ['Email', 'email', 30], ['Phone', 'phone', 18], ['From', 'from', 10],

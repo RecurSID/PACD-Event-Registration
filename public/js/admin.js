@@ -472,6 +472,29 @@ async function downloadQrPdf(eventId, registrationIds, button) {
   }
 }
 
+async function downloadQrZip(eventId, button) {
+  button.disabled = true;
+  button.textContent = 'Generating ZIP…';
+  try {
+    const res = await fetch(`/api/admin/events/${eventId}/qrs.zip`, {
+      method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/zip' },
+    });
+    if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'QR ZIP generation failed, please try again.');
+    }
+    saveBlob(
+      await res.blob(),
+      /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'qr-codes.zip',
+    );
+    closeModal();
+  } finally {
+    button.disabled = false;
+    button.textContent = button.dataset.defaultLabel;
+  }
+}
+
 async function fetchIndividualQr(eventId, registrationId) {
   const response = await fetch(`/api/admin/events/${eventId}/qr.png`, {
     method: 'POST', credentials: 'same-origin',
@@ -590,7 +613,8 @@ async function openQrs() {
     <p class="alert" id="modal-error" role="alert" hidden></p>
     <div class="modal-actions">
       <button type="button" class="btn" data-close>Cancel</button>
-      <button type="button" class="btn" id="generate-all" data-default-label="Download all">Download all</button>
+      <button type="button" class="btn" id="generate-all" data-default-label="Download all PDF">Download all PDF</button>
+      <button type="button" class="btn" id="generate-zip" data-default-label="Download all ZIP">Download all ZIP</button>
       <button type="button" class="btn primary" id="generate-qrs" data-default-label="Download selected">Download selected</button>
     </div>
     </div>
@@ -642,6 +666,14 @@ async function openQrs() {
   };
   $('#generate-qrs').addEventListener('click', () => generate($('#generate-qrs'), [...selected]));
   $('#generate-all').addEventListener('click', () => generate($('#generate-all'), undefined));
+  $('#generate-zip').addEventListener('click', async () => {
+    try {
+      await downloadQrZip($('#qr-event').value, $('#generate-zip'));
+    } catch (err) {
+      if (err.status === 401) showLogin();
+      else showModalError(escapeHtml(err.message));
+    }
+  });
   $('#qr-event').addEventListener('change', () => guarded(loadChoices));
   $('#qr-search').addEventListener('input', renderChoices);
   $('#qr-select-visible').addEventListener('change', (event) => {

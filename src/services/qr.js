@@ -1,11 +1,14 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+import JSZip from 'jszip';
+import { finished } from 'node:stream/promises';
 import { callRpc, runQuery } from '../db.js';
 import {
-  createCredential, credentialHash, normaliseFallbackCode, openCredential, sealCredential,
+  createCredential, credentialHash, normaliseFallbackCode,
 } from './credential.js';
 
 const A4 = [595.28, 841.89];
+const QR_RENDER_CONCURRENCY = 4;
 const one = (value) => (Array.isArray(value) ? value[0] : value);
 
 function company(attendee, organisations = []) {
@@ -59,10 +62,12 @@ export async function listQrRegistrations(db, eventId) {
   const batch = await loadBatch(db, eventId);
   if (!batch) return null;
   const active = batch.registrations.length ? await runQuery(db.from('registration_credentials')
-    .select('registration_id, print_payload')
+    .select('registration_id, print_token, fallback_code')
     .in('registration_id', batch.registrations.map((item) => item.registrationId))
     .eq('status', 'active')) : [];
-  const existing = new Set(active.filter((row) => row.print_payload).map((row) => row.registration_id));
+  const existing = new Set(active
+    .filter((row) => row.print_token && row.fallback_code)
+    .map((row) => row.registration_id));
   return {
     event: batch.event,
     registrations: batch.registrations.map((item) => ({
@@ -75,18 +80,22 @@ export async function listQrRegistrations(db, eventId) {
   };
 }
 
-function candidate(registration, secret) {
+function candidate(registration) {
   const credential = createCredential();
   return {
     registration_id: registration.registrationId,
     token_hash: credential.tokenHash,
     fallback_code_hash: credential.fallbackHash,
-    print_payload: sealCredential(credential, secret),
+    print_token: credential.token,
+    fallback_code: credential.fallback,
   };
 }
 
-function recover(row, secret) {
-  const credential = openCredential(row.print_payload, secret);
+function recover(row) {
+  const credential = { token: row?.print_token, fallback: row?.fallback_code };
+  if (typeof credential.token !== 'string' || typeof credential.fallback !== 'string') {
+    throw new Error('Stored QR credential has no printable values.');
+  }
   if (credentialHash(credential.token) !== row.token_hash
       || credentialHash(normaliseFallbackCode(credential.fallback)) !== row.fallback_code_hash) {
     throw new Error('Stored QR credential failed its integrity check.');
@@ -100,7 +109,29 @@ function qrUrl(baseUrl, token) {
   return url.href;
 }
 
-async function prepareBatch(db, eventId, { registrationIds, secret } = {}) {
+function renderQr(baseUrl, token, width = 1200, margin = 4) {
+  return QRCode.toBuffer(qrUrl(baseUrl, token), {
+    type: 'png', width, margin, errorCorrectionLevel: 'M',
+    color: { dark: '#000000', light: '#ffffff' },
+  });
+}
+
+async function mapConcurrent(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+async function prepareBatch(db, eventId, { registrationIds } = {}) {
   const batch = await loadBatch(db, eventId, registrationIds);
   if (!batch) return null;
   if (!batch.registrations.length) return { ...batch, empty: true };
@@ -109,45 +140,69 @@ async function prepareBatch(db, eventId, { registrationIds, secret } = {}) {
   }
   const prepared = await callRpc(db, 'prepare_event_credentials', {
     p_event_id: eventId,
-    p_items: batch.registrations.map((registration) => candidate(registration, secret)),
+    p_items: batch.registrations.map((registration) => candidate(registration)),
   });
   const byRegistration = new Map(prepared.map((row) => [row.registration_id, row]));
   return {
     ...batch,
-    credentials: batch.registrations.map((registration) => recover(byRegistration.get(registration.registrationId), secret)),
+    credentials: batch.registrations.map((registration) => recover(byRegistration.get(registration.registrationId))),
   };
 }
 
-export async function generateQrPng(db, eventId, { registrationId, secret, baseUrl }) {
-  const batch = await prepareBatch(db, eventId, { registrationIds: [registrationId], secret });
+export async function generateQrPng(db, eventId, { registrationId, baseUrl }) {
+  const batch = await prepareBatch(db, eventId, { registrationIds: [registrationId] });
   if (!batch || batch.empty || batch.invalidSelection) return batch;
   const credential = batch.credentials[0];
   return {
     ...batch,
-    png: await QRCode.toBuffer(qrUrl(baseUrl, credential.token), {
-      type: 'png', width: 1200, margin: 4, errorCorrectionLevel: 'M',
-      color: { dark: '#000000', light: '#ffffff' },
-    }),
+    png: await renderQr(baseUrl, credential.token),
   };
 }
 
-export async function generateQrPdf(db, eventId, { registrationIds, secret, baseUrl }) {
-  const batch = await prepareBatch(db, eventId, { registrationIds, secret });
+export async function generateQrImages(db, eventId, { baseUrl, width = 360 } = {}) {
+  const batch = await prepareBatch(db, eventId);
   if (!batch || batch.empty || batch.invalidSelection) return batch;
+  return {
+    ...batch,
+    images: await mapConcurrent(
+      batch.credentials,
+      QR_RENDER_CONCURRENCY,
+      (credential) => renderQr(baseUrl, credential.token, width, 3),
+    ),
+  };
+}
+
+export async function generateQrZip(db, eventId, { baseUrl, renderQrCode = renderQr } = {}) {
+  const batch = await prepareBatch(db, eventId);
+  if (!batch || batch.empty || batch.invalidSelection) return batch;
+  const zip = new JSZip();
+  const usedNames = new Map();
+  const images = await mapConcurrent(
+    batch.credentials,
+    QR_RENDER_CONCURRENCY,
+    (credential) => renderQrCode(baseUrl, credential.token),
+  );
+  for (let index = 0; index < batch.registrations.length; index += 1) {
+    const registration = batch.registrations[index];
+    const stem = `${safeName(registration.name)}-${safeName(registration.company, 'company')}-qr`;
+    const occurrence = (usedNames.get(stem) ?? 0) + 1;
+    usedNames.set(stem, occurrence);
+    const filename = `${stem}${occurrence > 1 ? `-${occurrence}` : ''}.png`;
+    zip.file(filename, images[index]);
+  }
+  return { ...batch, zip: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }) };
+}
+
+function createPdfDocument(batch) {
   const doc = new PDFDocument({ autoFirstPage: false, size: A4, margin: 0, info: { Title: `${batch.event.name} QR codes` } });
-  const chunks = [];
-  const complete = new Promise((resolve, reject) => {
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-  });
+  return doc;
+}
+
+async function populatePdf(doc, batch, baseUrl) {
   for (let index = 0; index < batch.registrations.length; index += 1) {
     const registration = batch.registrations[index];
     const credential = batch.credentials[index];
-    const qr = await QRCode.toBuffer(qrUrl(baseUrl, credential.token), {
-      type: 'png', width: 1200, margin: 3, errorCorrectionLevel: 'M',
-      color: { dark: '#000000', light: '#ffffff' },
-    });
+    const qr = await renderQr(baseUrl, credential.token, 1200, 3);
     doc.addPage({ size: A4, margin: 0 });
     doc.fillColor('#002b61').font('Helvetica-Bold').fontSize(24)
       .text(registration.name, 70, 130, { width: A4[0] - 140, align: 'center' });
@@ -156,12 +211,45 @@ export async function generateQrPdf(db, eventId, { registrationIds, secret, base
       .text(credential.fallback, 70, 530, { width: A4[0] - 140, align: 'center' });
   }
   doc.end();
-  return { ...batch, pdf: await complete };
 }
 
-function safeName(value) {
-  return String(value || 'attendee').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'attendee';
+export async function generateQrPdf(db, eventId, { registrationIds, baseUrl }) {
+  const batch = await prepareBatch(db, eventId, { registrationIds });
+  if (!batch || batch.empty || batch.invalidSelection) return batch;
+  const doc = createPdfDocument(batch);
+  const chunks = [];
+  const complete = new Promise((resolve, reject) => {
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+  const [, pdf] = await Promise.all([populatePdf(doc, batch, baseUrl), complete]);
+  return { ...batch, pdf };
+}
+
+export async function prepareQrPdfStream(db, eventId, { registrationIds, baseUrl }) {
+  const batch = await prepareBatch(db, eventId, { registrationIds });
+  if (!batch || batch.empty || batch.invalidSelection) return batch;
+  return {
+    ...batch,
+    async streamTo(output) {
+      const doc = createPdfDocument(batch);
+      doc.pipe(output);
+      const complete = finished(output, { cleanup: true });
+      try {
+        await Promise.all([populatePdf(doc, batch, baseUrl), complete]);
+      } catch (error) {
+        doc.destroy(error);
+        throw error;
+      }
+    },
+  };
+}
+
+function safeName(value, fallback = 'attendee') {
+  return String(value || fallback).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || fallback;
 }
 
 export const qrPngFilename = (registration) => `${safeName(registration.name)}-qr.png`;
 export const qrPdfFilename = (event) => `${safeName(event.code || event.name || 'event')}-qr-codes.pdf`;
+export const qrZipFilename = (event) => `${safeName(event.code || event.name || 'event')}-qr-codes.zip`;

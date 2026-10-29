@@ -68,21 +68,23 @@ describe('credentials and attendance', { skip: skipReason }, () => {
   test('print preparation issues once and reuses the same credential on every reprint', async () => {
     const first = createCredential();
     const second = createCredential();
-    const prepare = (credential, payloadValue) => db.rpc('prepare_event_credentials', {
+    const prepare = (credential) => db.rpc('prepare_event_credentials', {
       p_event_id: fixture.event.id,
       p_items: [{
         registration_id: fixture.registration.id,
         token_hash: credential.tokenHash,
         fallback_code_hash: credential.fallbackHash,
-        print_payload: payloadValue,
+        print_token: credential.token,
+        fallback_code: credential.fallback,
       }],
     });
-    const firstRows = await check(prepare(first, `v1.${'a'.repeat(80)}`));
-    const secondRows = await check(prepare(second, `v1.${'b'.repeat(80)}`));
+    const firstRows = await check(prepare(first));
+    const secondRows = await check(prepare(second));
     assert.equal(firstRows[0].issued, true);
     assert.equal(secondRows[0].issued, false);
     assert.equal(secondRows[0].token_hash, first.tokenHash);
-    assert.equal(secondRows[0].print_payload, firstRows[0].print_payload);
+    assert.equal(secondRows[0].print_token, first.token);
+    assert.equal(secondRows[0].fallback_code, first.fallback);
   });
 
   test('new attendees automatically join the current event with organisation snapshots', async () => {

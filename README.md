@@ -77,7 +77,7 @@ src/
   errors.js                  Stable API error mapping
   routes/                    Public, photo, and admin endpoints
   services/                  Dashboard, attendance, export, import, notification, photos
-supabase/migrations/         Ordered migrations 001–015
+supabase/migrations/         Ordered migrations 001–016
 scripts/
   apply-migration.js         Apply named SQL migrations through DATABASE_URL
   import-orgs.js             Organisation import entry point
@@ -119,9 +119,9 @@ Organisation rows are locked in stable ID order before capacity checks, preventi
 
 ### Admin
 
-Authenticated administrators can view summaries, filter participants, add attendees without public seat limits, edit/delete attendees, view private photos, approve/merge organisations, and export Excel data.
+Authenticated administrators can view summaries, filter participants, add attendees without public seat limits, edit/delete attendees, view private photos, approve/merge organisations, and export Excel data with embedded QR images in the Participants sheet.
 
-The Participants tab can view or download an individual's plain QR code, or download selected/all QR codes as a one-QR-per-page PDF. Once issued, an attendee's opaque QR credential is reused. Editing attendee details changes the verified profile without changing the QR.
+The Participants tab can view or download an individual's plain QR code, download selected/all QR codes as a one-QR-per-page PDF, or download all QR PNGs in a ZIP named by participant and company. Once issued, an attendee's opaque QR credential is reused. Editing attendee details changes the verified profile without changing the QR.
 
 ### Photos
 
@@ -183,11 +183,12 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `POST` | `/api/admin/login` | Start signed admin session |
 | `POST` | `/api/admin/logout` | Clear session |
 | `GET` | `/api/admin/data` | Dashboard data |
-| `GET` | `/api/admin/export` | Excel export |
+| `GET` | `/api/admin/export` | Excel export with participant QR images |
 | `GET` | `/api/admin/qr-events` | Events available for QR generation |
 | `GET` | `/api/admin/events/:id/qr-registrations` | Confirmed attendees available for QR generation |
 | `POST` | `/api/admin/events/:id/qr.png` | View or download one attendee QR as PNG |
 | `POST` | `/api/admin/events/:id/qrs.pdf` | Generate selected or all QR codes as PDF |
+| `POST` | `/api/admin/events/:id/qrs.zip` | Generate all QR codes as named PNGs in a ZIP |
 | `GET` | `/api/admin/attendance-days` | Event/day choices for scanner and dashboard |
 | `POST` | `/api/admin/attendance/check-in` | Verify QR/fallback and record attendance |
 | `GET` | `/api/admin/attendance?event_day_id=…` | Day roster and attendance summary |
@@ -230,7 +231,7 @@ Never commit `.env`, secret keys, webhook URLs, database exports, or attendee da
 
 ## Local development
 
-Requirements: Node.js 24, a development Supabase project, and migrations `001–015`.
+Requirements: Node.js 24, a development Supabase project, and migrations `001–016`.
 
 ```bash
 npm install

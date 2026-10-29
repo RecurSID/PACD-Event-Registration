@@ -69,7 +69,7 @@ export function fromDbError(error) {
 }
 
 // Express error middleware: the 4-argument signature is required.
-export function errorHandler(err, req, res, _next) {
+export function errorHandler(err, req, res, next) {
   let appError = err;
   if (typeof err?.type === 'string' && err.type.startsWith('entity.')) {
     appError = errors.validation({ form: 'Invalid request body.' });
@@ -79,5 +79,8 @@ export function errorHandler(err, req, res, _next) {
   if (appError.status >= 500) {
     console.error(`[${req.method} ${req.originalUrl}]`, appError.cause ?? appError);
   }
+  // A streamed download may have already sent its headers. Delegate so Express closes the
+  // incomplete response instead of attempting to append a JSON error to a PDF stream.
+  if (res.headersSent) return next(err);
   res.status(appError.status).json({ error: appError.code, message: appError.message, ...appError.extra });
 }

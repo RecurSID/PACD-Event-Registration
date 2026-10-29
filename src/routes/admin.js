@@ -9,7 +9,8 @@ import { loadDashboard } from '../services/dashboard.js';
 import { buildWorkbook, exportFilename } from '../services/export.js';
 import { PHOTO_BUCKET, photoContentType } from '../services/photo.js';
 import {
-  generateQrPdf, generateQrPng, listQrEvents, listQrRegistrations, qrPdfFilename, qrPngFilename,
+  generateQrImages, generateQrPng, generateQrZip, listQrEvents, listQrRegistrations,
+  prepareQrPdfStream, qrPdfFilename, qrPngFilename, qrZipFilename,
 } from '../services/qr.js';
 import {
   attendanceFilename, buildAttendanceWorkbook, checkIn, listAttendanceDays, loadAttendance,
@@ -67,9 +68,20 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     res.json(data);
   });
 
-  router.get('/export', async (_req, res) => {
+  router.get('/export', async (req, res) => {
     const data = await loadDashboard(db);
-    const buffer = await buildWorkbook(data).xlsx.writeBuffer();
+    const event = (await listQrEvents(db)).find((item) => item.confirmed_registrations > 0);
+    let qrImages = [];
+    if (event) {
+      const result = await generateQrImages(db, event.id, {
+        baseUrl: `${req.protocol}://${req.get('host')}`,
+      });
+      qrImages = result?.images?.map((png, index) => ({
+        attendeeId: result.registrations[index].attendeeId,
+        png,
+      })) ?? [];
+    }
+    const buffer = await buildWorkbook(data, { qrEvent: event, qrImages }).xlsx.writeBuffer();
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${exportFilename(new Date(data.generated_at))}"`,
@@ -133,9 +145,8 @@ export function adminRoutes({ db, config, loginDelayMs }) {
       registrationIds = req.body.registration_ids;
     }
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const batch = await generateQrPdf(db, eventId, {
+    const batch = await prepareQrPdfStream(db, eventId, {
       registrationIds,
-      secret: config.sessionSecret,
       baseUrl,
     });
     if (!batch) throw errors.notFound();
@@ -144,10 +155,25 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${qrPdfFilename(batch.event)}"`,
-      'Content-Length': String(batch.pdf.length),
       'Cache-Control': 'no-store',
     });
-    res.send(batch.pdf);
+    await batch.streamTo(res);
+  });
+
+  router.post('/events/:id/qrs.zip', async (req, res) => {
+    const eventId = participantId(req.params.id);
+    const batch = await generateQrZip(db, eventId, {
+      baseUrl: `${req.protocol}://${req.get('host')}`,
+    });
+    if (!batch) throw errors.notFound();
+    if (batch.empty) throw errors.conflict('This event has no confirmed registrations to download.');
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${qrZipFilename(batch.event)}"`,
+      'Content-Length': String(batch.zip.length),
+      'Cache-Control': 'no-store',
+    });
+    res.send(batch.zip);
   });
 
   router.post('/events/:id/qr.png', async (req, res) => {
@@ -156,7 +182,6 @@ export function adminRoutes({ db, config, loginDelayMs }) {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const result = await generateQrPng(db, eventId, {
       registrationId,
-      secret: config.sessionSecret,
       baseUrl,
     });
     if (!result) throw errors.notFound();

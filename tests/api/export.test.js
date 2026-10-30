@@ -18,7 +18,28 @@ test('GET /api/admin/export requires a session', async () => {
   assert.equal(res.status, 401);
 });
 
-test('GET /api/admin/export downloads an xlsx built from the dashboard data', async () => {
+test('GET /api/admin/export downloads the original workbook without generating QR codes', async () => {
+  const db = fakeDb({
+    tables: {
+      org_status: { data: fixtureOrgs, error: null },
+      attendees: { data: fixtureAttendees, error: null },
+    },
+  });
+  const res = await request(createApp({ db, config: testConfig, loginDelayMs: 0 }))
+    .get('/api/admin/export')
+    .set('Cookie', `${COOKIE_NAME}=${signSession(testConfig.sessionSecret)}`)
+    .buffer(true)
+    .parse(binary);
+
+  assert.equal(res.status, 200);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(res.body);
+  assert.equal(workbook.getWorksheet('Participants').columnCount, 12);
+  assert.equal(workbook.getWorksheet('Participants').getImages().length, 0);
+  assert.equal(db.calls.some((call) => call.fn === 'prepare_event_credentials'), false);
+});
+
+test('GET /api/admin/export?include_qr=1 embeds participant QR images', async () => {
   const db = fakeDb({
     tables: {
       org_status: { data: fixtureOrgs, error: null },
@@ -40,7 +61,7 @@ test('GET /api/admin/export downloads an xlsx built from the dashboard data', as
     },
   });
   const res = await request(createApp({ db, config: testConfig, loginDelayMs: 0 }))
-    .get('/api/admin/export')
+    .get('/api/admin/export?include_qr=1')
     .set('Cookie', `${COOKIE_NAME}=${signSession(testConfig.sessionSecret)}`)
     .buffer(true)
     .parse(binary);

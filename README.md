@@ -183,7 +183,7 @@ For full organisations, the public catalogue exposes only registrant name/design
 | `POST` | `/api/admin/login` | Start signed admin session |
 | `POST` | `/api/admin/logout` | Clear session |
 | `GET` | `/api/admin/data` | Dashboard data |
-| `GET` | `/api/admin/export` | Excel export with participant QR images |
+| `GET` | `/api/admin/export` | Standard Excel export; add `?include_qr=1` to embed participant QR images |
 | `GET` | `/api/admin/qr-events` | Events available for QR generation |
 | `GET` | `/api/admin/events/:id/qr-registrations` | Confirmed attendees available for QR generation |
 | `POST` | `/api/admin/events/:id/qr.png` | View or download one attendee QR as PNG |

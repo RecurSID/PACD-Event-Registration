@@ -426,8 +426,9 @@ function openMerge(id) {
   $('#confirm-merge').addEventListener('click', () => merge(false));
 }
 
-async function exportExcel() {
-  const res = await fetch('/api/admin/export', { credentials: 'same-origin' });
+async function exportExcel(includeQr = false) {
+  const url = includeQr ? '/api/admin/export?include_qr=1' : '/api/admin/export';
+  const res = await fetch(url, { credentials: 'same-origin' });
   if (res.status === 401) throw Object.assign(new Error('Please log in again.'), { status: 401 });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -756,6 +757,7 @@ $('#login-form').addEventListener('submit', async (event) => {
 $('#refresh').addEventListener('click', refresh);
 $('#add-participant').addEventListener('click', openAddParticipant);
 $('#export').addEventListener('click', () => guarded(exportExcel));
+$('#export-with-qrs').addEventListener('click', () => guarded(() => exportExcel(true)));
 $('#logout').addEventListener('click', async () => {
   await api('/api/admin/logout', { method: 'POST' }).catch(() => {});
   data = null;

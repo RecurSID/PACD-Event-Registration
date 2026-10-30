@@ -85,13 +85,14 @@ export function buildWorkbook(data, { qrEvent, qrImages = [] } = {}) {
     ...(qrEvent ? [{ item: 'QR code event', value: qrEvent.name }] : []),
   ]);
 
-  const participants = addSheet(workbook, 'Participants', [
+  const participantColumns = [
     ['Name', 'name', 25], ['Designation', 'designation', 22], ['Email', 'email', 30], ['Phone', 'phone', 18],
     ['From', 'from', 10], ['Suppliers', 'suppliers', 45], ['Supplier codes', 'supplier_codes', 20],
     ['Factories', 'factories', 45], ['Factory codes', 'factory_codes', 20],
     ['Organisation (other)', 'organisation', 30], ['Photo', 'photo', 8], ['Registered at', 'registered_at', 18],
-    ['QR code', 'qr_code', 20],
-  ], data.participants.map((p) => ({
+    ...(qrEvent ? [['QR code', 'qr_code', 20]] : []),
+  ];
+  const participants = addSheet(workbook, 'Participants', participantColumns, data.participants.map((p) => ({
     name: p.name,
     designation: p.designation,
     email: p.email,
@@ -104,7 +105,7 @@ export function buildWorkbook(data, { qrEvent, qrImages = [] } = {}) {
     organisation: p.organisation_name ?? '',
     photo: p.photo_path ? 'Y' : 'N',
     registered_at: formatDhaka(p.created_at),
-    qr_code: '',
+    ...(qrEvent ? { qr_code: '' } : {}),
   })));
   const qrByAttendee = new Map(qrImages.map((item) => [item.attendeeId, item.png]));
   data.participants.forEach((participant, index) => {

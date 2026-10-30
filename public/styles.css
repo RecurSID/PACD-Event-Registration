@@ -556,6 +556,9 @@ fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-sha
 /* ---------- Admin: toolbar & tiles ---------- */
 
 .toolbar {
+  position: relative;
+  z-index: 30;
+  overflow: visible;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -567,6 +570,35 @@ fieldset.field-invalid .radios label { border-color: var(--danger-fill); box-sha
 .toolbar h2 { margin: 0; font-size: 1.25rem; }
 .toolbar-title { display: flex; flex-direction: column; }
 .toolbar-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.export-menu-wrap { position: relative; }
+.export-menu {
+  position: absolute;
+  z-index: 31;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  width: max-content;
+  padding: 5px;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-glass);
+}
+.export-menu button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink-2);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.export-menu button:hover,
+.export-menu button:focus-visible { color: var(--navy); background: var(--info-soft); outline: none; }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 20px; }
 .tile {
@@ -975,6 +1007,7 @@ dialog::backdrop { background: rgba(0, 43, 97, 0.35); backdrop-filter: blur(4px)
     width: 100%;
   }
   .toolbar-actions .btn { width: 100%; }
+  .export-menu-wrap, .export-menu-wrap > .btn { width: 100%; }
   .donut-layout { grid-template-columns: 150px minmax(0, 1fr); }
   .donut-box { height: 150px; }
 }

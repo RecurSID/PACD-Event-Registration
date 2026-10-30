@@ -51,12 +51,17 @@
           <span class="muted" id="updated-at"></span>
         </div>
         <div class="toolbar-actions">
-          <button class="btn primary" type="button" id="export">Excel without QR codes</button>
-          <button class="btn" type="button" id="export-with-qrs">Excel with QR codes</button>
           <button class="btn" type="button" id="add-participant">Add participant</button>
           <a class="btn" href="/scanner.html">Open scanner</a>
           <button class="btn" type="button" id="refresh">Refresh</button>
           <button class="btn primary" type="button" data-qrs>QR codes</button>
+          <div class="export-menu-wrap">
+            <button class="btn primary" type="button" id="export" aria-haspopup="menu" aria-expanded="false">Export to Excel</button>
+            <div class="export-menu" id="export-menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-export-mode="plain">Without QR</button>
+              <button type="button" role="menuitem" data-export-mode="qr">With QR</button>
+            </div>
+          </div>
           <button class="btn" type="button" id="logout">Logout</button>
         </div>
       </header>
